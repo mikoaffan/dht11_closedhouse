@@ -1,0 +1,77 @@
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include "DHT.h"
+#include "ThingSpeak.h"
+char ssid[] = "LAPO-EXT";
+char pass[] = "adineyenie";
+#define SECRET_CH_ID 2141799
+#define SECRET_WRITE_APIKEY "F74FOJKJ2XXE9K8C"
+#define DHTTYPE DHT11
+#define DHTPIN 5
+#define READINGS_COUNT 5
+WiFiClient client;
+DHT dht(DHTPIN, DHTTYPE);
+unsigned long myChannelNumber = SECRET_CH_ID;
+const char* myWriteAPIKey = SECRET_WRITE_APIKEY;
+void setup() {
+Serial.begin(115200);
+Serial.println();
+for (uint8_t t = 4; t > 0; t--) {
+Serial.printf("[SETUP] WAIT %d...\n", t);
+Serial.flush();
+delay(1000);
+}
+//Connect or Reconnect to Wifi
+if(WiFi.status() != WL_CONNECTED) {
+Serial.print("Attempting to connect to SSID: ");
+Serial.println();
+while (WiFi.status() != WL_CONNECTED) {
+WiFi.begin(ssid, pass);
+Serial.print(".");
+delay(5000);
+}
+Serial.println("\nConnected.");
+}
+WiFi.mode(WIFI_STA);
+Serial.println("network is connected !");
+dht.begin();
+ThingSpeak.begin(client);
+}
+void loop() {
+float sumTemperature = 0.0;
+float avgTemperature = 0.0;
+//Baca suhu dari sensor DHT11 sebanyak READINGS_COUNT kali
+for (int i = 0; i < READINGS_COUNT; i++) {
+delay(3000); //Tunggu 3 detik antara setiap pembacaan
+float temperature = dht.readTemperature();
+if (isnan(temperature)) {
+Serial.println("Error membaca sensor DHT11!");
+continue; // Jika data suhu tidak valid, lewati pembacaan ini
+}
+sumTemperature += temperature;
+Serial.print(temperature);
+Serial.println(F("C"));
+if (temperature <= 30) {
+ThingSpeak.setField(1, 0);
+} else if (temperature >= 31 && temperature <=35) {
+ThingSpeak.setField(1, 5);
+} else if (temperature >= 36) {
+ThingSpeak.setField(1, 10);
+}
+}
+//Hitung rata-rata suhu
+avgTemperature = sumTemperature / READINGS_COUNT;
+//Tampilkan hasil pembacaan dan rata-rata suhu
+Serial.print("Rata-rata suhu dari 15 detik pembacaan: ");
+Serial.print(avgTemperature);
+Serial.print("C");
+ThingSpeak.setField(2, avgTemperature);
+delay(15000); // Tunggu 15 detik sebelum membaca sensor lagi
+// Write to the ThingSpeak channel
+int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+if (x == 200) {
+Serial.println("Channel update successful.");
+}else {
+Serial.println("Problem updating channel. HTTP error code" +String(x));
+}
+}
